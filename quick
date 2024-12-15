@@ -1,0 +1,129 @@
+// Shopify Checkout Form App (Free for all users)
+// This code provides a custom checkout form for Shopify apps
+
+const express = require("express");
+const bodyParser = require("body-parser");
+const cors = require("cors");
+const { Shopify } = require("@shopify/shopify-api");
+
+// Express app setup
+const app = express();
+app.use(cors());
+app.use(bodyParser.json());
+
+// Shopify API configuration
+Shopify.Context.initialize({
+  API_KEY: "your_api_key",
+  API_SECRET_KEY: "your_api_secret",
+  SCOPES: ["write_orders", "read_products"],
+  HOST_NAME: "your_host_name",
+  API_VERSION: "2024-01",
+  IS_EMBEDDED_APP: true,
+  SESSION_STORAGE: new Shopify.Session.MemorySessionStorage(),
+});
+
+// Route: Serve the checkout form
+app.get("/checkout", (req, res) => {
+  res.send(`
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Custom Checkout Form</title>
+      <style>
+        body { font-family: Arial, sans-serif; margin: 0; padding: 0; }
+        .form-container { max-width: 400px; margin: 50px auto; padding: 20px; border: 1px solid #ddd; border-radius: 10px; }
+        label { display: block; margin-bottom: 5px; }
+        input, textarea { width: 100%; padding: 10px; margin-bottom: 15px; border: 1px solid #ccc; border-radius: 5px; }
+        button { width: 100%; padding: 10px; background: #007bff; color: #fff; border: none; border-radius: 5px; cursor: pointer; }
+        button:hover { background: #0056b3; }
+      </style>
+    </head>
+    <body>
+      <div class="form-container">
+        <h2>Checkout Form</h2>
+        <form id="checkout-form">
+          <label for="name">Name:</label>
+          <input type="text" id="name" name="name" required />
+
+          <label for="phone">Phone:</label>
+          <input type="tel" id="phone" name="phone" required />
+
+          <label for="address">Address:</label>
+          <textarea id="address" name="address" required></textarea>
+
+          <button type="submit">Place Order</button>
+        </form>
+      </div>
+      <script>
+        document.getElementById('checkout-form').addEventListener('submit', async function(e) {
+          e.preventDefault();
+
+          const formData = {
+            name: document.getElementById('name').value,
+            phone: document.getElementById('phone').value,
+            address: document.getElementById('address').value,
+          };
+
+          try {
+            const response = await fetch('/api/checkout', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(formData),
+            });
+
+            const data = await response.json();
+            if (data.success) {
+              alert('Order placed successfully!');
+            } else {
+              alert('Error placing order.');
+            }
+          } catch (error) {
+            console.error('Error:', error);
+            alert('An unexpected error occurred.');
+          }
+        });
+      </script>
+    </body>
+    </html>
+  `);
+});
+
+// Route: Handle form submission
+app.post("/api/checkout", async (req, res) => {
+  const { name, phone, address } = req.body;
+
+  try {
+    const session = await Shopify.Utils.loadCurrentSession(req, res);
+    const order = {
+      line_items: [
+        {
+          title: "Custom Checkout Order",
+          price: 0.0,
+          quantity: 1,
+        },
+      ],
+      customer: {
+        first_name: name,
+        phone,
+      },
+      shipping_address: {
+        address1: address,
+      },
+      financial_status: "pending",
+    };
+
+    const response = await Shopify.API.Rest.Order.create(session.shop, order);
+    res.status(200).json({ success: true, order: response });
+  } catch (error) {
+    console.error("Error creating order:", error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Start the server
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`Server is running on port ${PORT}`);
+});
